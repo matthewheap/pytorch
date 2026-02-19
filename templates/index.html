@@ -1,0 +1,1145 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Soundscape — PyTorch-Powered Immersive Audio</title>
+    <meta name="description"
+        content="Record your voice and transform it into an immersive AI-generated soundscape with PyTorch audio processing. Use the sliders to alter the soundscape.">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+
+<body>
+
+    <div class="app-container">
+
+        <!-- ===== Header ===== -->
+        <header class="app-header">
+            <h1>Soundscape</h1>
+            <p class="subtitle">Record your voice · Play with the sliders/presets to alter the soundscape.</p>
+        </header>
+
+        <!-- ===== Record Section ===== -->
+        <div class="glass-card">
+            <div class="card-title"><span class="dot dot-magenta"></span> CAPTURE</div>
+            <div class="record-section">
+                <button id="recordBtn" class="record-btn" title="Click to record"></button>
+                <span id="recordTimer" class="record-timer">0:00</span>
+                <span id="recordLabel" class="record-label">Tap to record your voice</span>
+            </div>
+        </div>
+
+        <!-- ===== Status ===== -->
+        <div id="statusBar" class="status-bar hidden">
+            <div class="spinner"></div>
+            <span id="statusText">Processing with PyTorch…</span>
+        </div>
+
+        <!-- ===== Visualization ===== -->
+        <div class="glass-card viz-container">
+            <canvas id="vizCanvas"></canvas>
+        </div>
+
+        <!-- ===== Transport ===== -->
+        <div class="glass-card">
+            <div class="card-title"><span class="dot dot-cyan"></span> TRANSPORT</div>
+            <div class="transport-bar">
+                <button id="stopBtn" class="transport-btn" title="Stop">⏹</button>
+                <button id="playBtn" class="transport-btn play-btn" title="Play / Pause">▶</button>
+                <button id="loopBtn" class="transport-btn" title="Toggle Loop">🔁</button>
+            </div>
+        </div>
+
+        <!-- ===== Two-Column: Controls + Layers ===== -->
+        <div class="two-col">
+
+            <!-- Controls -->
+            <div class="glass-card">
+                <div class="card-title"><span class="dot dot-cyan"></span> CONTROLS</div>
+                <div class="controls-grid">
+
+                    <div class="control-item">
+                        <div class="control-label">
+                            <span>Reverb Amount</span>
+                            <span class="control-value" id="reverbVal">40%</span>
+                        </div>
+                        <input type="range" id="reverbSlider" min="0" max="100" value="40">
+                    </div>
+
+                    <div class="control-item">
+                        <div class="control-label">
+                            <span>Pitch Spread</span>
+                            <span class="control-value" id="pitchSpreadVal">0.5 oct</span>
+                        </div>
+                        <input type="range" id="pitchSpreadSlider" class="slider-magenta" min="0" max="200" value="50">
+                    </div>
+
+                    <div class="control-item">
+                        <div class="control-label">
+                            <span>Pan Width</span>
+                            <span class="control-value" id="panWidthVal">70%</span>
+                        </div>
+                        <input type="range" id="panWidthSlider" class="slider-violet" min="0" max="100" value="70">
+                    </div>
+
+                    <div class="control-item">
+                        <div class="control-label">
+                            <span>Grain Density</span>
+                            <span class="control-value" id="grainDensityVal">50%</span>
+                        </div>
+                        <input type="range" id="grainDensitySlider" class="slider-emerald" min="0" max="100" value="50">
+                    </div>
+
+                    <div class="control-item">
+                        <div class="control-label">
+                            <span>Layer Count</span>
+                            <span class="control-value" id="layerCountVal">8</span>
+                        </div>
+                        <input type="range" id="layerCountSlider" class="slider-orange" min="1" max="10" value="8"
+                            step="1">
+                    </div>
+
+                    <div class="control-item">
+                        <div class="control-label">
+                            <span>Playback Speed</span>
+                            <span class="control-value" id="speedVal">1.0x</span>
+                        </div>
+                        <input type="range" id="speedSlider" min="25" max="200" value="100">
+                    </div>
+
+                </div>
+
+                <!-- Presets -->
+                <div style="margin-top: 18px;">
+                    <div class="card-title"><span class="dot dot-violet"></span> PRESETS</div>
+                    <div class="preset-grid">
+                        <button class="preset-btn" data-preset="ethereal"><span class="emoji">✨</span>Ethereal</button>
+                        <button class="preset-btn" data-preset="rhythmic"><span class="emoji">🥁</span>Rhythmic</button>
+                        <button class="preset-btn" data-preset="ambient"><span class="emoji">🌊</span>Ambient</button>
+                        <button class="preset-btn" data-preset="chaotic"><span class="emoji">🌪️</span>Chaotic</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Layer Mixer -->
+            <div class="glass-card">
+                <div class="card-title"><span class="dot dot-magenta"></span> LAYER MIXER</div>
+                <div id="layerMixer" class="layer-mixer">
+                    <p style="color: var(--text-muted); font-size: 0.85rem; text-align: center; padding: 30px 0;">
+                        Record audio to generate layers
+                    </p>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- ===== FFT Partials ===== -->
+        <div class="glass-card" id="partialsCard">
+            <div class="card-title" style="justify-content: space-between;">
+                <span><span class="dot dot-emerald"></span> FFT PARTIALS</span>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="partialsToggle" checked>
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+            <div id="partialsContent">
+                <div style="display:flex; align-items:center; gap:14px; margin-bottom:16px; flex-wrap:wrap;">
+                    <div class="feature-item" style="flex:1; min-width:140px;">
+                        <div class="label">Detected Fundamental</div>
+                        <div class="value" id="fundamentalDisplay">— Hz</div>
+                    </div>
+                    <div class="control-item" style="flex:2; min-width:200px;">
+                        <div class="control-label">
+                            <span>Partials Volume</span>
+                            <span class="control-value" id="partialsVolVal">50%</span>
+                        </div>
+                        <input type="range" id="partialsVolSlider" class="slider-emerald" min="0" max="100" value="50">
+                    </div>
+                </div>
+                <div class="partials-grid" id="partialsGrid">
+                    <!-- Generated by JS -->
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== Features ===== -->
+        <div class="glass-card" id="featuresCard" style="display:none;">
+            <div class="card-title"><span class="dot dot-cyan"></span> PYTORCH ANALYSIS</div>
+            <div id="featuresGrid" class="features-grid"></div>
+        </div>
+
+    </div>
+
+    <script>
+        // =========================================================================
+        // Soundscape — Client-side Audio Engine
+        // =========================================================================
+
+        (() => {
+            'use strict';
+
+            // ---- State ----
+            let audioCtx = null;
+            let mediaRecorder = null;
+            let recordedChunks = [];
+            let isRecording = false;
+            let isPlaying = false;
+            let isLooping = true;
+            let timerInterval = null;
+            let recordStartTime = 0;
+
+            // Audio layers state
+            let layerData = [];      // from server: [{name, audio(base64), default_pan, default_gain}, ...]
+            let layerBuffers = [];    // decoded AudioBuffer[]
+            let layerSources = [];    // active AudioBufferSourceNode[]
+            let layerGains = [];      // GainNode[]
+            let layerPans = [];       // StereoPannerNode[]
+            let analyserNode = null;
+            let reverbConvolver = null;
+            let reverbGain = null;
+            let dryGain = null;
+            let masterGain = null;
+            let sampleRate = 44100;
+
+            // Features from server
+            let audioFeatures = null;
+
+            // ---- DOM refs ----
+            const recordBtn = document.getElementById('recordBtn');
+            const recordTimer = document.getElementById('recordTimer');
+            const recordLabel = document.getElementById('recordLabel');
+            const statusBar = document.getElementById('statusBar');
+            const statusText = document.getElementById('statusText');
+            const playBtn = document.getElementById('playBtn');
+            const stopBtn = document.getElementById('stopBtn');
+            const loopBtn = document.getElementById('loopBtn');
+            const layerMixer = document.getElementById('layerMixer');
+            const featuresCard = document.getElementById('featuresCard');
+            const featuresGrid = document.getElementById('featuresGrid');
+            const vizCanvas = document.getElementById('vizCanvas');
+            const vizCtx = vizCanvas.getContext('2d');
+
+            // Sliders
+            const reverbSlider = document.getElementById('reverbSlider');
+            const pitchSpreadSlider = document.getElementById('pitchSpreadSlider');
+            const panWidthSlider = document.getElementById('panWidthSlider');
+            const grainDensitySlider = document.getElementById('grainDensitySlider');
+            const layerCountSlider = document.getElementById('layerCountSlider');
+            const speedSlider = document.getElementById('speedSlider');
+
+            // Value displays
+            const reverbVal = document.getElementById('reverbVal');
+            const pitchSpreadVal = document.getElementById('pitchSpreadVal');
+            const panWidthVal = document.getElementById('panWidthVal');
+            const grainDensityVal = document.getElementById('grainDensityVal');
+            const layerCountVal = document.getElementById('layerCountVal');
+            const speedVal = document.getElementById('speedVal');
+
+            // =========================================================================
+            // Audio Context
+            // =========================================================================
+            function ensureAudioCtx() {
+                if (!audioCtx) {
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+                return audioCtx;
+            }
+
+            // =========================================================================
+            // Recording
+            // =========================================================================
+            recordBtn.addEventListener('click', async () => {
+                if (isRecording) {
+                    stopRecording();
+                } else {
+                    await startRecording();
+                }
+            });
+
+            async function startRecording() {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    ensureAudioCtx();
+                    recordedChunks = [];
+                    mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
+
+                    mediaRecorder.ondataavailable = e => {
+                        if (e.data.size > 0) recordedChunks.push(e.data);
+                    };
+
+                    mediaRecorder.onstop = () => {
+                        stream.getTracks().forEach(t => t.stop());
+                        const blob = new Blob(recordedChunks, { type: 'audio/webm' });
+                        sendToServer(blob);
+                    };
+
+                    mediaRecorder.start(100);
+                    isRecording = true;
+                    recordBtn.classList.add('recording');
+                    recordLabel.textContent = 'Recording… tap to stop';
+                    recordTimer.classList.add('active');
+                    recordStartTime = Date.now();
+                    timerInterval = setInterval(updateTimer, 100);
+                } catch (err) {
+                    console.error('Mic access denied', err);
+                    recordLabel.textContent = 'Microphone access denied — please allow it';
+                }
+            }
+
+            function stopRecording() {
+                if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                    mediaRecorder.stop();
+                }
+                isRecording = false;
+                recordBtn.classList.remove('recording');
+                recordLabel.textContent = 'Processing…';
+                recordTimer.classList.remove('active');
+                clearInterval(timerInterval);
+            }
+
+            function updateTimer() {
+                const elapsed = (Date.now() - recordStartTime) / 1000;
+                const m = Math.floor(elapsed / 60);
+                const s = Math.floor(elapsed % 60);
+                recordTimer.textContent = `${m}:${s.toString().padStart(2, '0')}`;
+            }
+
+            // =========================================================================
+            // Server Communication
+            // =========================================================================
+            async function sendToServer(blob) {
+                statusBar.classList.remove('hidden');
+                statusText.textContent = 'Converting audio…';
+
+                // Convert webm to wav via AudioContext decoding + manual WAV encoding
+                const arrayBuf = await blob.arrayBuffer();
+                const ctx = ensureAudioCtx();
+                let decoded;
+                try {
+                    decoded = await ctx.decodeAudioData(arrayBuf);
+                } catch (e) {
+                    statusText.textContent = 'Error decoding recorded audio';
+                    return;
+                }
+
+                // Get mono float32 samples
+                const samples = decoded.getChannelData(0);
+                const wavBlob = float32ToWavBlob(samples, decoded.sampleRate);
+
+                statusText.textContent = 'Processing with PyTorch…';
+
+                const formData = new FormData();
+                formData.append('audio', wavBlob, 'recording.wav');
+                formData.append('num_layers', layerCountSlider.value);
+
+                try {
+                    const resp = await fetch('/api/process', { method: 'POST', body: formData });
+                    if (!resp.ok) {
+                        const err = await resp.json();
+                        throw new Error(err.error || 'Server error');
+                    }
+                    const data = await resp.json();
+                    handleServerResponse(data);
+                } catch (err) {
+                    console.error(err);
+                    statusText.textContent = `Error: ${err.message}`;
+                    setTimeout(() => statusBar.classList.add('hidden'), 3000);
+                }
+            }
+
+            function float32ToWavBlob(samples, sr) {
+                const numChannels = 1;
+                const bitsPerSample = 16;
+                const blockAlign = numChannels * (bitsPerSample / 8);
+                const byteRate = sr * blockAlign;
+                const dataSize = samples.length * (bitsPerSample / 8);
+                const buffer = new ArrayBuffer(44 + dataSize);
+                const view = new DataView(buffer);
+
+                function writeString(offset, str) {
+                    for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+                }
+
+                writeString(0, 'RIFF');
+                view.setUint32(4, 36 + dataSize, true);
+                writeString(8, 'WAVE');
+                writeString(12, 'fmt ');
+                view.setUint32(16, 16, true);
+                view.setUint16(20, 1, true);
+                view.setUint16(22, numChannels, true);
+                view.setUint32(24, sr, true);
+                view.setUint32(28, byteRate, true);
+                view.setUint16(32, blockAlign, true);
+                view.setUint16(34, bitsPerSample, true);
+                writeString(36, 'data');
+                view.setUint32(40, dataSize, true);
+
+                let offset = 44;
+                for (let i = 0; i < samples.length; i++) {
+                    let s = Math.max(-1, Math.min(1, samples[i]));
+                    view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+                    offset += 2;
+                }
+
+                return new Blob([buffer], { type: 'audio/wav' });
+            }
+
+            // =========================================================================
+            // Handle Server Response
+            // =========================================================================
+            async function handleServerResponse(data) {
+                const ctx = ensureAudioCtx();
+                sampleRate = data.sample_rate;
+                audioFeatures = data.features;
+                layerData = data.layers;
+
+                statusText.textContent = 'Decoding audio layers…';
+
+                // Decode all base64 WAV layers into AudioBuffers
+                layerBuffers = [];
+                for (const layer of layerData) {
+                    const binary = atob(layer.audio);
+                    const bytes = new Uint8Array(binary.length);
+                    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+                    try {
+                        const audioBuf = await ctx.decodeAudioData(bytes.buffer);
+                        layerBuffers.push(audioBuf);
+                    } catch (e) {
+                        console.warn('Failed to decode layer:', layer.name, e);
+                        layerBuffers.push(null);
+                    }
+                }
+
+                // Build layer mixer UI
+                buildLayerMixer();
+
+                // Show features
+                showFeatures();
+
+                statusBar.classList.add('hidden');
+                recordLabel.textContent = 'Tap to record again';
+
+                // Auto-play
+                startPlayback();
+            }
+
+            // =========================================================================
+            // Layer Mixer UI
+            // =========================================================================
+            function buildLayerMixer() {
+                layerMixer.innerHTML = '';
+                layerData.forEach((layer, i) => {
+                    const strip = document.createElement('div');
+                    strip.className = 'layer-strip';
+                    strip.innerHTML = `
+            <span class="layer-name" style="color: ${layerColor(i)}">${layer.name}</span>
+            <div class="layer-controls">
+                <span class="layer-pan-label">L</span>
+                <input type="range" class="layer-pan-slider" data-idx="${i}"
+                       min="-100" max="100" value="${Math.round(layer.default_pan * 100)}"
+                       style="flex:1; max-width:100px;">
+                <span class="layer-pan-label">R</span>
+                <input type="range" class="layer-gain-slider" data-idx="${i}"
+                       min="0" max="100" value="${Math.round(layer.default_gain * 100)}"
+                       style="flex:1;">
+            </div>
+            <button class="mute-btn" data-idx="${i}" title="Mute">M</button>
+        `;
+                    layerMixer.appendChild(strip);
+                });
+
+                // Attach slider listeners
+                document.querySelectorAll('.layer-pan-slider').forEach(s => {
+                    s.addEventListener('input', e => {
+                        const idx = parseInt(e.target.dataset.idx);
+                        if (layerPans[idx]) layerPans[idx].pan.value = e.target.value / 100;
+                    });
+                });
+                document.querySelectorAll('.layer-gain-slider').forEach(s => {
+                    s.addEventListener('input', e => {
+                        const idx = parseInt(e.target.dataset.idx);
+                        if (layerGains[idx]) layerGains[idx].gain.value = e.target.value / 100;
+                    });
+                });
+                document.querySelectorAll('.mute-btn').forEach(btn => {
+                    btn.addEventListener('click', e => {
+                        const idx = parseInt(e.target.dataset.idx);
+                        e.target.classList.toggle('muted');
+                        if (layerGains[idx]) {
+                            layerGains[idx].gain.value = e.target.classList.contains('muted') ? 0 :
+                                document.querySelector(`.layer-gain-slider[data-idx="${idx}"]`).value / 100;
+                        }
+                    });
+                });
+            }
+
+            function layerColor(i) {
+                const colors = ['#00d4ff', '#ff00aa', '#8844ff', '#00ff88', '#ff6622', '#ffcc00', '#44ddff', '#ff4488'];
+                return colors[i % colors.length];
+            }
+
+            // =========================================================================
+            // Features Display
+            // =========================================================================
+            function showFeatures() {
+                if (!audioFeatures) return;
+                featuresCard.style.display = '';
+                featuresGrid.innerHTML = '';
+
+                const items = [
+                    { label: 'Spectral Centroid', value: `${audioFeatures.spectral_centroid} Hz` },
+                    { label: 'RMS Energy', value: audioFeatures.rms_energy.toFixed(4) },
+                    { label: 'Zero-Crossing Rate', value: audioFeatures.zero_crossing_rate.toFixed(4) },
+                    { label: 'Dominant Freq', value: `${audioFeatures.dominant_frequency} Hz` },
+                ];
+
+                items.forEach(item => {
+                    const div = document.createElement('div');
+                    div.className = 'feature-item';
+                    div.innerHTML = `<div class="label">${item.label}</div><div class="value">${item.value}</div>`;
+                    featuresGrid.appendChild(div);
+                });
+            }
+
+            // =========================================================================
+            // Audio Playback Engine — Web Audio Graph
+            // =========================================================================
+            function createReverbImpulse(ctx, duration = 3, decay = 3) {
+                const length = ctx.sampleRate * duration;
+                const impulse = ctx.createBuffer(2, length, ctx.sampleRate);
+                for (let ch = 0; ch < 2; ch++) {
+                    const data = impulse.getChannelData(ch);
+                    for (let i = 0; i < length; i++) {
+                        data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, decay);
+                    }
+                }
+                return impulse;
+            }
+
+            function startPlayback() {
+                stopPlayback();
+                const ctx = ensureAudioCtx();
+
+                // Master gain
+                masterGain = ctx.createGain();
+                masterGain.gain.value = 0.8;
+
+                // Analyser for visualization
+                analyserNode = ctx.createAnalyser();
+                analyserNode.fftSize = 2048;
+                analyserNode.smoothingTimeConstant = 0.8;
+
+                // Reverb (convolver)
+                reverbConvolver = ctx.createConvolver();
+                reverbConvolver.buffer = createReverbImpulse(ctx, 3, 3);
+
+                reverbGain = ctx.createGain();
+                reverbGain.gain.value = reverbSlider.value / 100;
+
+                dryGain = ctx.createGain();
+                dryGain.gain.value = 1 - (reverbSlider.value / 200);
+
+                // Connect reverb path
+                reverbConvolver.connect(reverbGain);
+                reverbGain.connect(masterGain);
+                dryGain.connect(masterGain);
+                masterGain.connect(analyserNode);
+                analyserNode.connect(ctx.destination);
+
+                // Create source nodes for each layer
+                layerSources = [];
+                layerGains = [];
+                layerPans = [];
+
+                const speed = speedSlider.value / 100;
+
+                layerData.forEach((layer, i) => {
+                    if (!layerBuffers[i]) return;
+
+                    const source = ctx.createBufferSource();
+                    source.buffer = layerBuffers[i];
+                    source.loop = isLooping;
+                    source.playbackRate.value = speed;
+
+                    const gain = ctx.createGain();
+                    const panSliderEl = document.querySelector(`.layer-gain-slider[data-idx="${i}"]`);
+                    const muteBtn = document.querySelector(`.mute-btn[data-idx="${i}"]`);
+                    gain.gain.value = (muteBtn && muteBtn.classList.contains('muted')) ? 0 :
+                        (panSliderEl ? panSliderEl.value / 100 : layer.default_gain);
+
+                    const panner = ctx.createStereoPanner();
+                    const panSlider = document.querySelector(`.layer-pan-slider[data-idx="${i}"]`);
+                    const panWidth = panWidthSlider.value / 100;
+                    panner.pan.value = (panSlider ? panSlider.value / 100 : layer.default_pan) * panWidth;
+
+                    source.connect(gain);
+                    gain.connect(panner);
+                    panner.connect(dryGain);
+                    panner.connect(reverbConvolver);
+
+                    source.start(0);
+
+                    layerSources.push(source);
+                    layerGains.push(gain);
+                    layerPans.push(panner);
+
+                    source.onended = () => {
+                        if (!isLooping && i === 0) {
+                            isPlaying = false;
+                            playBtn.textContent = '▶';
+                            playBtn.classList.remove('playing');
+                        }
+                    };
+                });
+
+                isPlaying = true;
+                playBtn.textContent = '⏸';
+                playBtn.classList.add('playing');
+
+                // Start visualization loop
+                requestAnimationFrame(drawVisualization);
+            }
+
+            function stopPlayback() {
+                layerSources.forEach(s => { try { s.stop(); } catch (e) { } });
+                layerSources = [];
+                layerGains = [];
+                layerPans = [];
+                isPlaying = false;
+                playBtn.textContent = '▶';
+                playBtn.classList.remove('playing');
+            }
+
+            // =========================================================================
+            // Transport Controls
+            // =========================================================================
+            playBtn.addEventListener('click', () => {
+                if (!layerBuffers.length) return;
+                if (isPlaying) {
+                    stopPlayback();
+                } else {
+                    startPlayback();
+                }
+            });
+
+            stopBtn.addEventListener('click', () => {
+                stopPlayback();
+            });
+
+            loopBtn.addEventListener('click', () => {
+                isLooping = !isLooping;
+                loopBtn.classList.toggle('active', isLooping);
+                layerSources.forEach(s => { s.loop = isLooping; });
+            });
+            loopBtn.classList.add('active'); // default on
+
+            // =========================================================================
+            // Slider Handlers
+            // =========================================================================
+            reverbSlider.addEventListener('input', () => {
+                const v = reverbSlider.value;
+                reverbVal.textContent = `${v}%`;
+                if (reverbGain) reverbGain.gain.value = v / 100;
+                if (dryGain) dryGain.gain.value = 1 - (v / 200);
+            });
+
+            pitchSpreadSlider.addEventListener('input', () => {
+                const v = pitchSpreadSlider.value;
+                pitchSpreadVal.textContent = `${(v / 100).toFixed(1)} oct`;
+            });
+
+            panWidthSlider.addEventListener('input', () => {
+                const v = panWidthSlider.value;
+                panWidthVal.textContent = `${v}%`;
+                const width = v / 100;
+                layerPans.forEach((panner, i) => {
+                    const panSlider = document.querySelector(`.layer-pan-slider[data-idx="${i}"]`);
+                    if (panSlider) panner.pan.value = (panSlider.value / 100) * width;
+                });
+            });
+
+            grainDensitySlider.addEventListener('input', () => {
+                grainDensityVal.textContent = `${grainDensitySlider.value}%`;
+            });
+
+            layerCountSlider.addEventListener('input', () => {
+                layerCountVal.textContent = layerCountSlider.value;
+            });
+
+            speedSlider.addEventListener('input', () => {
+                const v = speedSlider.value / 100;
+                speedVal.textContent = `${v.toFixed(2)}x`;
+                layerSources.forEach(s => { s.playbackRate.value = v; });
+            });
+
+            // =========================================================================
+            // Presets
+            // =========================================================================
+            const PRESETS = {
+                ethereal: { reverb: 80, pitchSpread: 120, panWidth: 90, grainDensity: 30, speed: 60 },
+                rhythmic: { reverb: 20, pitchSpread: 30, panWidth: 70, grainDensity: 80, speed: 100 },
+                ambient: { reverb: 70, pitchSpread: 80, panWidth: 100, grainDensity: 20, speed: 50 },
+                chaotic: { reverb: 50, pitchSpread: 190, panWidth: 100, grainDensity: 95, speed: 180 },
+            };
+
+            document.querySelectorAll('.preset-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+
+                    const preset = PRESETS[btn.dataset.preset];
+                    if (!preset) return;
+
+                    reverbSlider.value = preset.reverb;
+                    reverbSlider.dispatchEvent(new Event('input'));
+
+                    pitchSpreadSlider.value = preset.pitchSpread;
+                    pitchSpreadSlider.dispatchEvent(new Event('input'));
+
+                    panWidthSlider.value = preset.panWidth;
+                    panWidthSlider.dispatchEvent(new Event('input'));
+
+                    grainDensitySlider.value = preset.grainDensity;
+                    grainDensitySlider.dispatchEvent(new Event('input'));
+
+                    speedSlider.value = preset.speed;
+                    speedSlider.dispatchEvent(new Event('input'));
+                });
+            });
+
+            // =========================================================================
+            // Visualization — Canvas
+            // =========================================================================
+            function resizeCanvas() {
+                const rect = vizCanvas.getBoundingClientRect();
+                vizCanvas.width = rect.width * window.devicePixelRatio;
+                vizCanvas.height = rect.height * window.devicePixelRatio;
+                vizCtx.scale(window.devicePixelRatio, window.devicePixelRatio);
+            }
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+
+            // Particles
+            const particles = [];
+            const MAX_PARTICLES = 120;
+
+            function spawnParticle(energy) {
+                if (particles.length >= MAX_PARTICLES) return;
+                const rect = vizCanvas.getBoundingClientRect();
+                const cx = rect.width / 2;
+                const cy = rect.height / 2;
+                const angle = Math.random() * Math.PI * 2;
+                const speed = 0.5 + energy * 3;
+                particles.push({
+                    x: cx, y: cy,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed,
+                    life: 1,
+                    decay: 0.005 + Math.random() * 0.015,
+                    size: 2 + Math.random() * 4,
+                    hue: Math.random() * 360,
+                });
+            }
+
+            function drawVisualization() {
+                const rect = vizCanvas.getBoundingClientRect();
+                const W = rect.width;
+                const H = rect.height;
+                const cx = W / 2;
+                const cy = H / 2;
+
+                vizCtx.clearRect(0, 0, W, H);
+
+                // Get audio data
+                let freqData, timeData;
+                let avgEnergy = 0;
+                if (analyserNode && isPlaying) {
+                    freqData = new Uint8Array(analyserNode.frequencyBinCount);
+                    timeData = new Uint8Array(analyserNode.fftSize);
+                    analyserNode.getByteFrequencyData(freqData);
+                    analyserNode.getByteTimeDomainData(timeData);
+                    for (let i = 0; i < freqData.length; i++) avgEnergy += freqData[i];
+                    avgEnergy /= freqData.length * 255;
+                } else {
+                    freqData = new Uint8Array(128).fill(0);
+                    timeData = new Uint8Array(256);
+                    for (let i = 0; i < timeData.length; i++) timeData[i] = 128;
+                }
+
+                const time = performance.now() / 1000;
+
+                // --- Background glow ---
+                const glowR = 80 + avgEnergy * 120;
+                const grad = vizCtx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(W, H) * 0.6);
+                grad.addColorStop(0, `hsla(${(time * 20) % 360}, 80%, 20%, ${0.15 + avgEnergy * 0.2})`);
+                grad.addColorStop(0.5, `hsla(${(time * 20 + 120) % 360}, 60%, 10%, 0.05)`);
+                grad.addColorStop(1, 'transparent');
+                vizCtx.fillStyle = grad;
+                vizCtx.fillRect(0, 0, W, H);
+
+                // --- Circular frequency bars ---
+                const barCount = 64;
+                const innerRadius = 60 + avgEnergy * 20;
+                const maxBarHeight = 100 + avgEnergy * 50;
+                const step = Math.floor(freqData.length / barCount);
+
+                for (let i = 0; i < barCount; i++) {
+                    const angle = (i / barCount) * Math.PI * 2 - Math.PI / 2;
+                    const val = freqData[i * step] / 255;
+                    const barH = val * maxBarHeight;
+
+                    const x1 = cx + Math.cos(angle) * innerRadius;
+                    const y1 = cy + Math.sin(angle) * innerRadius;
+                    const x2 = cx + Math.cos(angle) * (innerRadius + barH);
+                    const y2 = cy + Math.sin(angle) * (innerRadius + barH);
+
+                    const hue = (i / barCount) * 300 + time * 40;
+                    vizCtx.strokeStyle = `hsla(${hue % 360}, 90%, ${55 + val * 30}%, ${0.6 + val * 0.4})`;
+                    vizCtx.lineWidth = Math.max(2, (W / barCount) * 0.5);
+                    vizCtx.lineCap = 'round';
+                    vizCtx.beginPath();
+                    vizCtx.moveTo(x1, y1);
+                    vizCtx.lineTo(x2, y2);
+                    vizCtx.stroke();
+
+                    // Mirror bar
+                    const mirrorAngle = -angle + Math.PI;
+                    const mx1 = cx + Math.cos(mirrorAngle) * innerRadius;
+                    const my1 = cy + Math.sin(mirrorAngle) * innerRadius;
+                    const mx2 = cx + Math.cos(mirrorAngle) * (innerRadius + barH * 0.5);
+                    const my2 = cy + Math.sin(mirrorAngle) * (innerRadius + barH * 0.5);
+                    vizCtx.strokeStyle = `hsla(${(hue + 180) % 360}, 70%, 50%, ${0.2 + val * 0.2})`;
+                    vizCtx.lineWidth = 1.5;
+                    vizCtx.beginPath();
+                    vizCtx.moveTo(mx1, my1);
+                    vizCtx.lineTo(mx2, my2);
+                    vizCtx.stroke();
+                }
+
+                // --- Wavy ring (time domain) ---
+                vizCtx.beginPath();
+                const ringRadius = innerRadius - 10;
+                const sliceAngle = (Math.PI * 2) / timeData.length;
+                for (let i = 0; i < timeData.length; i++) {
+                    const v = (timeData[i] - 128) / 128;
+                    const r = ringRadius + v * 25;
+                    const a = i * sliceAngle - Math.PI / 2;
+                    const x = cx + Math.cos(a) * r;
+                    const y = cy + Math.sin(a) * r;
+                    if (i === 0) vizCtx.moveTo(x, y); else vizCtx.lineTo(x, y);
+                }
+                vizCtx.closePath();
+                vizCtx.strokeStyle = `hsla(${(time * 30) % 360}, 90%, 70%, 0.5)`;
+                vizCtx.lineWidth = 1.5;
+                vizCtx.stroke();
+
+                // --- Center orb ---
+                const orbGrad = vizCtx.createRadialGradient(cx, cy, 0, cx, cy, 30 + avgEnergy * 30);
+                orbGrad.addColorStop(0, `hsla(${(time * 50) % 360}, 100%, 80%, ${0.6 + avgEnergy * 0.4})`);
+                orbGrad.addColorStop(0.5, `hsla(${(time * 50 + 60) % 360}, 90%, 50%, 0.2)`);
+                orbGrad.addColorStop(1, 'transparent');
+                vizCtx.fillStyle = orbGrad;
+                vizCtx.beginPath();
+                vizCtx.arc(cx, cy, 30 + avgEnergy * 30, 0, Math.PI * 2);
+                vizCtx.fill();
+
+                // --- Particles ---
+                if (isPlaying && avgEnergy > 0.1) {
+                    for (let i = 0; i < Math.ceil(avgEnergy * 4); i++) spawnParticle(avgEnergy);
+                }
+
+                for (let i = particles.length - 1; i >= 0; i--) {
+                    const p = particles[i];
+                    p.x += p.vx;
+                    p.y += p.vy;
+                    p.life -= p.decay;
+
+                    if (p.life <= 0) { particles.splice(i, 1); continue; }
+
+                    vizCtx.globalAlpha = p.life * 0.8;
+                    vizCtx.fillStyle = `hsl(${p.hue}, 90%, 65%)`;
+                    vizCtx.beginPath();
+                    vizCtx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+                    vizCtx.fill();
+                }
+                vizCtx.globalAlpha = 1;
+
+                // --- Stereo field indicator ---
+                const fieldY = H - 30;
+                const fieldW = W * 0.4;
+                const fieldX = cx - fieldW / 2;
+                vizCtx.strokeStyle = 'rgba(255,255,255,0.1)';
+                vizCtx.lineWidth = 1;
+                vizCtx.beginPath();
+                vizCtx.moveTo(fieldX, fieldY);
+                vizCtx.lineTo(fieldX + fieldW, fieldY);
+                vizCtx.stroke();
+
+                // Pan dots for each layer
+                layerPans.forEach((panner, i) => {
+                    const pan = panner.pan.value;
+                    const dx = fieldX + (pan + 1) / 2 * fieldW;
+                    vizCtx.fillStyle = layerColor(i);
+                    vizCtx.globalAlpha = 0.8;
+                    vizCtx.beginPath();
+                    vizCtx.arc(dx, fieldY, 4, 0, Math.PI * 2);
+                    vizCtx.fill();
+                });
+                vizCtx.globalAlpha = 1;
+
+                // Labels
+                vizCtx.fillStyle = 'rgba(255,255,255,0.25)';
+                vizCtx.font = '10px Inter, sans-serif';
+                vizCtx.textAlign = 'center';
+                vizCtx.fillText('L', fieldX - 10, fieldY + 4);
+                vizCtx.fillText('R', fieldX + fieldW + 10, fieldY + 4);
+
+                requestAnimationFrame(drawVisualization);
+            }
+
+            // =========================================================================
+            // FFT Partials Engine
+            // =========================================================================
+            const PARTIAL_NAMES = [
+                'Fundamental', '1st Partial', '2nd Partial', '3rd Partial', '4th Partial',
+                '5th Partial', '6th Partial', '7th Partial', '8th Partial', '9th Partial'
+            ];
+
+            let fundamentalHz = 0;
+            let envelopeData = [];
+            let envelopeHopMs = 30;
+            let partialsEnabled = [true, true, true, false, false, false, false, false, false, false];
+            let partialOscillators = [];  // OscillatorNode[]
+            let partialGains = [];        // GainNode[]
+            let partialsMasterGain = null;
+            let envelopeInterval = null;
+
+            const partialsToggle = document.getElementById('partialsToggle');
+            const partialsContent = document.getElementById('partialsContent');
+            const partialsGrid = document.getElementById('partialsGrid');
+            const fundamentalDisplay = document.getElementById('fundamentalDisplay');
+            const partialsVolSlider = document.getElementById('partialsVolSlider');
+            const partialsVolVal = document.getElementById('partialsVolVal');
+
+            // Build the checkbox grid
+            function buildPartialsGrid() {
+                partialsGrid.innerHTML = '';
+                PARTIAL_NAMES.forEach((name, i) => {
+                    const freq = fundamentalHz > 0 ? (fundamentalHz * (i + 1)).toFixed(1) : '—';
+                    const card = document.createElement('div');
+                    card.className = `partial-card ${partialsEnabled[i] ? 'active' : ''}`;
+                    card.dataset.idx = i;
+                    card.innerHTML = `
+                        <span class="partial-indicator"></span>
+                        <div class="partial-info">
+                            <div class="partial-name">${name}</div>
+                            <div class="partial-freq">${freq} Hz</div>
+                        </div>
+                        <input type="checkbox" class="partial-checkbox" data-idx="${i}"
+                               ${partialsEnabled[i] ? 'checked' : ''}>
+                    `;
+                    partialsGrid.appendChild(card);
+
+                    // Click on card toggles checkbox
+                    card.addEventListener('click', (e) => {
+                        if (e.target.classList.contains('partial-checkbox')) return; // let checkbox handle itself
+                        const cb = card.querySelector('.partial-checkbox');
+                        cb.checked = !cb.checked;
+                        cb.dispatchEvent(new Event('change'));
+                    });
+
+                    const checkbox = card.querySelector('.partial-checkbox');
+                    checkbox.addEventListener('change', (e) => {
+                        const idx = parseInt(e.target.dataset.idx);
+                        partialsEnabled[idx] = e.target.checked;
+                        card.classList.toggle('active', e.target.checked);
+                        if (isPlaying) rebuildPartials();
+                    });
+                });
+            }
+
+            buildPartialsGrid();
+
+            // Toggle partials on/off
+            partialsToggle.addEventListener('change', () => {
+                const on = partialsToggle.checked;
+                partialsContent.style.opacity = on ? '1' : '0.3';
+                partialsContent.style.pointerEvents = on ? 'auto' : 'none';
+                if (!on) {
+                    stopPartials();
+                } else if (isPlaying && fundamentalHz > 0) {
+                    startPartials();
+                }
+            });
+
+            // Volume slider
+            partialsVolSlider.addEventListener('input', () => {
+                const v = partialsVolSlider.value;
+                partialsVolVal.textContent = `${v}%`;
+                if (partialsMasterGain) {
+                    partialsMasterGain.gain.value = v / 100;
+                }
+            });
+
+            function startPartials() {
+                stopPartials();
+                if (!partialsToggle.checked || fundamentalHz <= 0) return;
+
+                const ctx = ensureAudioCtx();
+                partialsMasterGain = ctx.createGain();
+                partialsMasterGain.gain.value = partialsVolSlider.value / 100;
+                partialsMasterGain.connect(dryGain);
+                if (reverbConvolver) partialsMasterGain.connect(reverbConvolver);
+
+                partialOscillators = [];
+                partialGains = [];
+
+                for (let i = 0; i < PARTIAL_NAMES.length; i++) {
+                    if (!partialsEnabled[i]) {
+                        partialOscillators.push(null);
+                        partialGains.push(null);
+                        continue;
+                    }
+
+                    const freq = fundamentalHz * (i + 1);
+                    if (freq > 16000) {  // Skip inaudibly high partials
+                        partialOscillators.push(null);
+                        partialGains.push(null);
+                        continue;
+                    }
+
+                    const osc = ctx.createOscillator();
+                    osc.type = 'sine';
+                    osc.frequency.value = freq;
+
+                    const gain = ctx.createGain();
+                    // Higher partials are quieter naturally
+                    gain.gain.value = 0;
+
+                    osc.connect(gain);
+                    gain.connect(partialsMasterGain);
+                    osc.start();
+
+                    partialOscillators.push(osc);
+                    partialGains.push(gain);
+                }
+
+                // Start envelope-driven pulsing
+                startEnvelopePulsing();
+            }
+
+            function stopPartials() {
+                if (envelopeInterval) {
+                    clearInterval(envelopeInterval);
+                    envelopeInterval = null;
+                }
+                partialOscillators.forEach(osc => {
+                    if (osc) try { osc.stop(); } catch (e) { }
+                });
+                partialOscillators = [];
+                partialGains = [];
+                partialsMasterGain = null;
+            }
+
+            function rebuildPartials() {
+                if (isPlaying && partialsToggle.checked) {
+                    startPartials();
+                }
+            }
+
+            function startEnvelopePulsing() {
+                if (!envelopeData.length) return;
+
+                let envIdx = 0;
+                const intervalMs = envelopeHopMs;
+
+                envelopeInterval = setInterval(() => {
+                    if (envIdx >= envelopeData.length) {
+                        if (isLooping) {
+                            envIdx = 0;
+                        } else {
+                            clearInterval(envelopeInterval);
+                            envelopeInterval = null;
+                            return;
+                        }
+                    }
+
+                    const amp = envelopeData[envIdx];
+                    const ctx = ensureAudioCtx();
+                    const now = ctx.currentTime;
+
+                    for (let i = 0; i < partialGains.length; i++) {
+                        const g = partialGains[i];
+                        if (!g) continue;
+
+                        // Amplitude decreases with partial number
+                        const partialFalloff = 1 / (i + 1);
+                        const targetGain = amp * partialFalloff * 0.5;
+
+                        // Smooth ramp to target
+                        g.gain.cancelScheduledValues(now);
+                        g.gain.setTargetAtTime(targetGain, now, 0.02);
+                    }
+
+                    // Pulse visual indicator on cards
+                    if (amp > 0.3) {
+                        document.querySelectorAll('.partial-card.active').forEach(card => {
+                            card.classList.remove('pulsing');
+                            void card.offsetWidth; // force reflow
+                            card.classList.add('pulsing');
+                        });
+                    }
+
+                    envIdx++;
+                }, intervalMs);
+            }
+
+            // Monkey-patch startPlayback to include partials
+            const origStartPlayback = startPlayback;
+            startPlayback = function () {
+                origStartPlayback();
+                if (fundamentalHz > 0 && partialsToggle.checked) {
+                    startPartials();
+                }
+            };
+
+            const origStopPlayback = stopPlayback;
+            stopPlayback = function () {
+                stopPartials();
+                origStopPlayback();
+            };
+
+            // Monkey-patch handleServerResponse to capture partials data
+            const origHandleServerResponse = handleServerResponse;
+            handleServerResponse = async function (data) {
+                fundamentalHz = data.fundamental_hz || 0;
+                envelopeData = data.envelope || [];
+                envelopeHopMs = data.envelope_hop_ms || 30;
+
+                // Update display
+                fundamentalDisplay.textContent = fundamentalHz > 0
+                    ? `${fundamentalHz.toFixed(1)} Hz`
+                    : 'No pitch detected';
+
+                // Rebuild grid with frequencies
+                buildPartialsGrid();
+
+                // Show fundamental in features
+                if (data.features) {
+                    data.features.fundamental_hz = fundamentalHz;
+                }
+
+                await origHandleServerResponse(data);
+            };
+
+            // Start idle visualization
+            requestAnimationFrame(drawVisualization);
+
+        })();
+    </script>
+
+</body>
+
+</html>
