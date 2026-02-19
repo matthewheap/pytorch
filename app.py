@@ -5,18 +5,13 @@ Records mic input, processes with torchaudio, returns layered audio buffers.
 
 import io
 import base64
-import json
-import struct
-import math
 
 import numpy as np
 import torch
 import torch.nn as nn
-import torchaudio
 import torchaudio.transforms as T
 import torchaudio.functional as F
 from flask import Flask, render_template, request, jsonify
-from scipy.signal import fftconvolve
 from scipy.io import wavfile as scipy_wav
 
 app = Flask(__name__)
@@ -288,7 +283,7 @@ def extract_transients(waveform: torch.Tensor, sr: int, onset_samples: torch.Ten
         transients.append(t * window)
 
     return transients
- 
+
 
 def build_rhythmic_layer(transients: list[torch.Tensor], sr: int,
                          duration_samples: int, pattern: str = "straight") -> torch.Tensor:
